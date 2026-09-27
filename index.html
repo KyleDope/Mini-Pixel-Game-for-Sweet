@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sweet's Little House</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#171321;color:#fff1d6;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;display:flex;justify-content:center}
+  .wrap{width:100%;max-width:1040px;padding:18px;margin:0 auto}
+  .game{width:100%;max-width:1000px;margin:0 auto;background:#171321;border:4px solid #3d2d4f;border-radius:12px;padding:10px;box-shadow:0 10px 30px #0005}
+  canvas{display:block;width:min(100%,900px);height:auto;margin:0 auto;background:#243f35;border:3px solid #0d0b12;image-rendering:pixelated}
+  .controls{display:flex;gap:7px;justify-content:center;flex-wrap:wrap;margin-top:9px}
+  button{font:700 13px ui-monospace,monospace;border:2px solid #5d496c;background:#2a2134;color:#fff1d6;border-radius:6px;padding:8px 12px;cursor:pointer}
+  .hint{text-align:center;color:#d8c8dc;font-size:12px;margin:8px 3px 2px}
+  .overlay{position:fixed;inset:0;background:#08070dcc;display:none;align-items:center;justify-content:center;padding:20px;z-index:5}
+  .overlay.show{display:flex}
+  .letter{width:min(560px,94vw);background:#fff0d3;color:#4a3040;border:7px solid #8c5d6d;box-shadow:0 14px 50px #0009;padding:26px 28px;position:relative;transform:rotate(-1deg)}
+  .letter:before{content:"";position:absolute;inset:8px;border:2px dashed #d09b9e;pointer-events:none}
+  .letter-inner{position:relative;z-index:1}
+  .letter h2{font-size:20px;margin:0 0 18px;text-align:center}
+  .letter p{font-family:Georgia,serif;font-size:17px;line-height:1.65;white-space:pre-wrap;margin:0}
+  .close{display:block;margin:22px auto 0;background:#8c5d6d;color:#fff7e9;border:0}
+  .small{font-size:11px;text-align:center;margin-top:8px;color:#765466}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="game">
+<canvas id="gameCanvas" width="1280" height="880"></canvas>
+<div class="controls">
+<button data-key="ArrowUp">▲</button><button data-key="ArrowLeft">◀</button>
+<button data-key="ArrowDown">▼</button><button data-key="ArrowRight">▶</button>
+<button id="interact">ENTER / E</button><button id="reset">RESET</button>
+</div>
+<div class="hint">Move with WASD / arrow keys. Find all 5 memories, then approach the special room.</div>
+</div>
+</div>
+
+<div id="letterOverlay" class="overlay">
+  <div class="letter">
+    <div class="letter-inner">
+      <h2>💌 A Letter For Sweet</h2>
+      <p id="letterText"></p>
+      <button class="close" id="closeLetter">Close letter</button>
+      <div class="small">Made especially for you ♡</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+const c=document.getElementById('gameCanvas'),ctx=c.getContext('2d');
+ctx.imageSmoothingEnabled=false;
+const W=1280,H=880;ctx.setTransform(2,0,0,2,0,0);
+let keys={},message='Welcome home, Sweet. ♡',messageTimer=0,memories=0,doorUnlocked=false,started=false;
+let currentMemory=null, memoryNoticeVisible=false, completionNoticePending=false, completionNoticeVisible=false;
+let endingMusic=null, musicStarted=false;
+
+// Optional ending music: put a file named "love-song.mp3" in the same folder as this HTML.
+// It will begin ONLY when Sweet opens the special room/letter.
+function startEndingMusic(){
+  if(musicStarted) return;
+  musicStarted=true;
+  endingMusic=new Audio('love-song.mp3');
+  endingMusic.loop=true;
+  endingMusic.volume=0.45;
+  endingMusic.play().catch(()=>{
+    message='Click/tap the page once to start the love song. ♡';
+    messageTimer=240;
+  });
+}
+
+const YOUR_MESSAGE = `My Sweet,
+
+Happy 28th Birthday love! thinking that the 4 years part of your age, I get to experience you. I'm forever grateful
+
+Every little thing you found in this little game was just a reminder of how much I treasure you.
+
+Thank you for being you, for all you've done for us I couldn't ask for more. God's grace surely fits you.
+
+No matter how far we are with each other right now, Please know that may pinoy pa na nagmamahal sayo sa pinas XD.
+
+I love you, Sweet. ♡
+
+— Your love, Kylie`;
+
+const player={x:320,y:325,speed:2.2,frame:0};
+const memoriesList=[
+ {x:318,y:274,title:'Trivia #1',text:'She likes to watch Rom-Coms',got:false},
+ {x:105,y:116,title:'Trivia #2',text:'She likes to cuddle in bed and plays a soft worship instrumentals to sleep',got:false},
+ {x:490,y:116,title:'Trivia #3',text:'She likes books, but Im more excited for the new chapter She is in right now.',got:false},
+ {x:105,y:316,title:'Trivia #4',text:'She likes Matcha a lot, and has a good taste bud',got:false},
+ {x:535,y:270,title:'Trivia #5',text:'She likes new places and adventure XD',got:false}
+];
+
+function rect(x,y,w,h,col){ctx.fillStyle=col;ctx.fillRect(x,y,w,h)}
+function text(s,x,y,size=12,col='#fff1d6',align='left'){ctx.font='bold '+size+'px monospace';ctx.fillStyle=col;ctx.textAlign=align;ctx.fillText(s,x,y)}
+function panel(x,y,w,h){rect(x+3,y+3,w,h,'#090810');rect(x,y,w,h,'#241a31');rect(x+2,y+2,w-4,h-4,'#4c3957')}
+function room(x,y,w,h,floor){rect(x,y,w,h,'#6b4537');rect(x+5,y+5,w-10,h-10,floor)}
+function furniture(x,y,w,h,top,bottom){rect(x+3,y+4,w,h,bottom);rect(x,y,w,h,top);rect(x+2,y+2,w-4,Math.max(2,h*.22),'#ffe0b1')}
+
+function drawHouse(){
+ rect(0,0,W,H,'#132c27');
+ for(let y=0;y<H;y+=8)for(let x=0;x<W;x+=8)if((x*7+y*3)%17===0)rect(x,y,2,2,'#315c3f');
+ const oy=25;
+ rect(45,30+oy,550,335,'#352634');rect(51,36+oy,538,323,'#9b6248');
+ room(55,40+oy,170,125,'#c98a64');room(230,40+oy,175,125,'#b77a5b');room(410,40+oy,174,125,'#bd805e');
+ room(55,170+oy,170,190,'#b97b58');room(230,170+oy,175,190,'#d39468');room(410,170+oy,174,190,'#b97958');
+ rect(55,163+oy,529,7,'#54362f');rect(55,168+oy,529,5,'#e4a878');rect(225,40+oy,7,320,'#54362f');rect(405,40+oy,7,320,'#54362f');
+ rect(72,65+oy,135,70,'#d99b9b');rect(77,70+oy,125,60,'#efb3b0');
+ rect(245,218+oy,145,83,'#d7b8a2');rect(252,225+oy,131,69,'#f0d0b2');
+ rect(425,210+oy,143,76,'#d29a8f');rect(434,219+oy,125,58,'#e8b0a6');
+ furniture(78,78+oy,108,48,'#f6d7d0','#75495a');rect(82,88+oy,35,25,'#fff0e0');rect(123,88+oy,54,25,'#f2c5c2');
+ rect(153,101+oy,10,9,'#f6e3d2');rect(151,95+oy,4,8,'#f6e3d2');rect(160,95+oy,4,8,'#f6e3d2');
+ furniture(270,65+oy,90,28,'#e8e2d9','#587080');rect(300,54+oy,30,12,'#dbe5e5');rect(308,55+oy,14,8,'#f5ffff');rect(367,72+oy,18,45,'#88aeb0');
+ furniture(452,96+oy,105,38,'#87553b','#5a392f');
+ for(let i=0;i<5;i++)rect(458+i*17,101+oy,10,7,['#d76f74','#e2b05e','#759b8a','#8c78b4','#df8d62'][i]);
+ furniture(64,204+oy,120,25,'#d5aa7c','#70493a');rect(68,236+oy,48,8,'#4b3430');rect(125,236+oy,52,8,'#4b3430');
+ rect(75,253+oy,105,52,'#9a6147');rect(80,258+oy,95,40,'#d18d61');rect(91,270+oy,20,20,'#4f765f');
+ rect(86,318+oy,105,8,'#744632');rect(91,307+oy,95,12,'#a66a49');
+ furniture(265,235+oy,104,35,'#f1dfc5','#74535b');rect(292,276+oy,54,8,'#8d5a3e');rect(300,269+oy,38,10,'#b87952');
+ rect(375,214+oy,8,58,'#5a3d3d');rect(363,213+oy,35,23,'#211e29');rect(367,217+oy,27,15,'#6c8d8b');
+ rect(468,238+oy,62,10,'#8a5945');rect(482,230+oy,34,16,'#e5b08e');rect(494,218+oy,11,14,'#c98268');
+ rect(475,314+oy,75,46,'#211923');rect(485,323+oy,55,37,'#3a273d');rect(506,340+oy,10,15,'#6e4b3f');rect(510,344+oy,3,3,'#f2bd62');
+ for(const wx of [78,440]){rect(wx,42+oy,65,9,'#513a45');rect(wx+3,45+oy,59,25,'#86b6b3');rect(wx+31,45+oy,4,25,'#513a45');rect(wx+3,55+oy,59,4,'#513a45')}
+ text('BEDROOM',140,55+oy,8,'#563644','center');text('BATH',318,55+oy,8,'#563644','center');text('STUDY',497,55+oy,8,'#563644','center');
+ text('KITCHEN',140,192+oy,8,'#563644','center');text('LIVING ROOM',318,192+oy,8,'#563644','center');text('PLUSHIE',497,192+oy,8,'#563644','center');
+ text(doorUnlocked?'♡':'🔒',513,311+oy,14,doorUnlocked?'#ff9ab6':'#f0d4b0','center');
+}
+
+function drawPlayer(){
+ const x=Math.round(player.x),y=Math.round(player.y),bob=player.frame%20<10?0:1;
+ rect(x-7,y+13,15,4,'#533f40');rect(x-6,y-8+bob,13,12,'#35262d');rect(x-8,y-5+bob,4,15,'#35262d');rect(x+4,y-5+bob,4,15,'#35262d');
+ rect(x-5,y-6+bob,10,10,'#f4c49d');rect(x-5,y-3+bob,4,4,'#241c28');rect(x+1,y-3+bob,4,4,'#241c28');rect(x-1,y-2+bob,2,2,'#241c28');
+ rect(x-6,y+4+bob,12,9,'#f19ab1');rect(x-8,y+6+bob,3,7,'#f19ab1');rect(x+5,y+6+bob,3,7,'#f19ab1');
+ rect(x-5,y+13,4,5,'#4c3b58');rect(x+1,y+13,4,5,'#4c3b58');
+}
+
+function drawHUD(){
+ panel(12,10,164,39);rect(18,16,31,27,'#352532');rect(23,20,20,17,'#f19ab1');rect(25,17,16,8,'#35262d');
+ rect(25,23,6,5,'#f4c49d');rect(34,23,6,5,'#f4c49d');rect(25,23,5,4,'#211b2b');rect(34,23,5,4,'#211b2b');
+ text('Sweet',56,29,13);text('♡'.repeat(Math.min(memories,5))+'♡'.repeat(5-Math.min(memories,5)),56,43,10,'#f08cae');
+ panel(188,10,205,39);text('NOTES',202,26,9,'#d8c8dc');text(memories+' / 5 discovered',202,41,12);
+ panel(405,10,223,39);text('WASD / ARROWS  •  ENTER / E',516,34,10,'#fff1d6','center');
+ if((currentMemory && memoryNoticeVisible) || (completionNoticeVisible && messageTimer>0)){
+   panel(18,350,604,82);
+   if(currentMemory){
+     text('💭 '+currentMemory.title,32,370,11,'#ffd6e3');
+     const words=currentMemory.text.split(' '); let line='',yy=389;
+     for(const word of words){const test=line?line+' '+word:word;if(ctx.measureText(test).width>560){text(line,32,yy,10);yy+=16;line=word}else line=test;}
+     if(line)text(line,32,yy,10);
+     text('Press E to continue.',32,420,8,'#bfa9ba');
+   }else{
+     text('♡ '+message,32,377,11,'#ffd6e3');
+     text('Press E to hide this message. Press E again to see it.',32,408,9,'#d8c8dc');
+   }
+ }
+}
+
+function near(o){return Math.hypot(player.x-o.x,player.y-o.y)<34}
+
+function showLetter(){
+ startEndingMusic();
+ document.getElementById('letterText').textContent=YOUR_MESSAGE;
+ document.getElementById('letterOverlay').classList.add('show');
+}
+
+function interact(){
+ if(!started){started=true;message='Explore the house, Sweet. There are notes waiting for you. ♡';messageTimer=260;return}
+
+ // The special-room door gets priority once all memories are found.
+ // This keeps the room accessible even while the completion notice is being toggled.
+ if(memories===5 && Math.abs(player.x-512)<48&&Math.abs(player.y-370)<48){
+   currentMemory=null;
+   memoryNoticeVisible=false;
+   completionNoticeVisible=false;
+   messageTimer=0;
+   showLetter();
+   return;
+ }
+
+ // Once all memories are found, E toggles the completion notice on/off.
+ // It can be opened again anytime after it has been dismissed.
+ if(memories===5){
+   currentMemory=null;
+   memoryNoticeVisible=false;
+   message='You found every notes. The special room is ready for you. ♡';
+   completionNoticeVisible=!completionNoticeVisible;
+   messageTimer=completionNoticeVisible?360:0;
+   return;
+ }
+
+ let found=null;for(const m of memoriesList)if(near(m))found=m;
+ if(found){
+   if(!found.got){
+     found.got=true;
+     memories++;
+     // Newly discovered memories open immediately.
+     currentMemory=found;
+     memoryNoticeVisible=true;
+     messageTimer=0;
+
+     if(memories===5){
+       doorUnlocked=true;
+       completionNoticePending=true;
+     }
+   }else{
+     // Discovered memories now use the same E toggle behavior:
+     // E = show, E = hide, E = show again.
+     if(currentMemory===found){
+       memoryNoticeVisible=!memoryNoticeVisible;
+       messageTimer=memoryNoticeVisible?360:0;
+     }else{
+       currentMemory=found;
+       memoryNoticeVisible=true;
+       messageTimer=0;
+     }
+   }
+   return;
+ }
+ if(Math.abs(player.x-512)<48&&Math.abs(player.y-370)<48){
+   if(doorUnlocked)showLetter();
+   else{message='It is locked. Find all five memories first. ♡';messageTimer=240}
+ }
+}
+
+function move(dx,dy){
+ if(dx||dy)player.frame++;
+ player.x=Math.max(64,Math.min(576,player.x+dx*player.speed));
+ player.y=Math.max(83,Math.min(385,player.y+dy*player.speed));
+}
+
+function loop(){
+ let dx=0,dy=0;if(keys.ArrowLeft||keys.a)dx--;if(keys.ArrowRight||keys.d)dx++;if(keys.ArrowUp||keys.w)dy--;if(keys.ArrowDown||keys.s)dy++;
+ if(dx&&dy){dx*=.707;dy*=.707}move(dx,dy);drawHouse();
+ for(const m of memoriesList)if(!m.got&&near(m)){ctx.globalAlpha=.8+Math.sin(Date.now()/150)*.2;rect(m.x-10,m.y-18,20,3,'#ffd66d');ctx.globalAlpha=1;text('E',m.x,m.y-21,8,'#fff1d6','center')}
+ if(near({x:512,y:370})&&doorUnlocked)text('E',512,329,8,'#ffd66d','center');
+ drawPlayer();drawHUD();if(messageTimer>0)messageTimer--;requestAnimationFrame(loop);
+}
+
+window.addEventListener('keydown',e=>{
+ if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' ','Enter'].includes(e.key))e.preventDefault();
+ keys[e.key]=true;
+ if(e.key==='Enter'||e.key.toLowerCase()==='e')interact();
+});
+window.addEventListener('keyup',e=>keys[e.key]=false);
+
+document.querySelectorAll('[data-key]').forEach(b=>{
+ const k=b.dataset.key;
+ b.addEventListener('pointerdown',e=>{e.preventDefault();keys[k]=true});
+ ['pointerup','pointercancel','pointerleave'].forEach(ev=>b.addEventListener(ev,()=>keys[k]=false));
+});
+document.getElementById('interact').onclick=interact;
+document.getElementById('closeLetter').onclick=()=>document.getElementById('letterOverlay').classList.remove('show');
+document.getElementById('reset').onclick=()=>{
+ memories=0;doorUnlocked=false;started=false;player.x=320;player.y=325;
+ memoriesList.forEach(m=>m.got=false);
+ currentMemory=null; memoryNoticeVisible=false; completionNoticePending=false; completionNoticeVisible=false;
+ if(endingMusic){endingMusic.pause();endingMusic.currentTime=0;endingMusic=null;}
+ musicStarted=false;
+ message='Game reset. Welcome home, Sweet. ♡';messageTimer=240;
+};
+loop();
+})();
+</script>
+</body>
+</html>
