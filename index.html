@@ -88,10 +88,11 @@ I love you, Sweet. ♡
 const player={x:320,y:325,speed:2.2,frame:0};
 const memoriesList=[
  {x:318,y:274,title:'Trivia #1',text:'She likes to watch Rom-Coms',got:false},
- {x:105,y:116,title:'Trivia #2',text:'She likes to cuddle in bed and plays a soft worship instrumentals to sleep',got:false},
+ {x:105,y:116,title:'Trivia #2',text:'She likes to cuddle in bed and plays a soft worship instrumentals to sleep.',got:false},
  {x:490,y:116,title:'Trivia #3',text:'She likes books, but Im more excited for the new chapter She is in right now.',got:false},
- {x:105,y:316,title:'Trivia #4',text:'She likes Matcha a lot, and has a good taste bud',got:false},
- {x:535,y:270,title:'Trivia #5',text:'She likes new places and adventure XD',got:false}
+ {x:105,y:316,title:'Trivia #4',text:'She likes Matcha a lot, and has a good taste bud.',got:false},
+ {x:535,y:270,title:'Trivia #5',text:'She likes new places and adventure XD',got:false},
+ {x:250,y:145,title:'Trivia #6',text:'She loves her make-up and skin care because she loves to take care of herself.',got:false}
 ];
 
 function rect(x,y,w,h,col){ctx.fillStyle=col;ctx.fillRect(x,y,w,h)}
@@ -140,8 +141,8 @@ function drawPlayer(){
 function drawHUD(){
  panel(12,10,164,39);rect(18,16,31,27,'#352532');rect(23,20,20,17,'#f19ab1');rect(25,17,16,8,'#35262d');
  rect(25,23,6,5,'#f4c49d');rect(34,23,6,5,'#f4c49d');rect(25,23,5,4,'#211b2b');rect(34,23,5,4,'#211b2b');
- text('Sweet',56,29,13);text('♡'.repeat(Math.min(memories,5))+'♡'.repeat(5-Math.min(memories,5)),56,43,10,'#f08cae');
- panel(188,10,205,39);text('NOTES',202,26,9,'#d8c8dc');text(memories+' / 5 discovered',202,41,12);
+ text('Sweet',56,29,13);text('♡'.repeat(Math.min(memories,6))+'♡'.repeat(6-Math.min(memories,6)),56,43,10,'#f08cae');
+ panel(188,10,205,39);text('NOTES',202,26,9,'#d8c8dc');text(memories+' / 6 discovered',202,41,12);
  panel(405,10,223,39);text('WASD / ARROWS  •  ENTER / E',516,34,10,'#fff1d6','center');
  if((currentMemory && memoryNoticeVisible) || (completionNoticeVisible && messageTimer>0)){
    panel(18,350,604,82);
@@ -167,11 +168,11 @@ function showLetter(){
 }
 
 function interact(){
- if(!started){started=true;message='Explore the house, Sweet. There are notes waiting for you. ♡';messageTimer=260;return}
+ if(!started){started=true;message='Explore the house, Sweet. There are love notes waiting for you. ♡';messageTimer=260;return}
 
  // The special-room door gets priority once all memories are found.
  // This keeps the room accessible even while the completion notice is being toggled.
- if(memories===5 && Math.abs(player.x-512)<48&&Math.abs(player.y-370)<48){
+ if(memories===6 && Math.abs(player.x-512)<48&&Math.abs(player.y-370)<48){
    currentMemory=null;
    memoryNoticeVisible=false;
    completionNoticeVisible=false;
@@ -182,7 +183,7 @@ function interact(){
 
  // Once all memories are found, E toggles the completion notice on/off.
  // It can be opened again anytime after it has been dismissed.
- if(memories===5){
+ if(memories===6 && !memoriesList.some(m=>near(m))){
    currentMemory=null;
    memoryNoticeVisible=false;
    message='You found every notes. The special room is ready for you. ♡';
@@ -201,7 +202,7 @@ function interact(){
      memoryNoticeVisible=true;
      messageTimer=0;
 
-     if(memories===5){
+     if(memories===6){
        doorUnlocked=true;
        completionNoticePending=true;
      }
